@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 
+from app.api.router import api_router
 from app.core.handlers import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
-from app.api.routes import router
 from app.infrastructure.imaging.rembg_client import init_rembg_session
 from app.infrastructure.storage.s3_client import init_s3_client
 
@@ -23,5 +23,5 @@ def startup() -> None:
     logger.info("Application dependencies initialized")
 
 
-app.include_router(router)
+app.include_router(api_router)
 register_exception_handlers(app)
