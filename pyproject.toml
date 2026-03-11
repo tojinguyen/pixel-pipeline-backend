@@ -4,4 +4,19 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi>=0.135.1",
+    "numpy>=2.4.3",
+    "opencv-python>=4.13.0.92",
+    "pillow>=12.1.1",
+    "python-multipart>=0.0.22",
+    "rembg>=2.0.72",
+    "scikit-learn>=1.8.0",
+    "uvicorn>=0.41.0",
+]
+
+[dependency-groups]
+dev = [
+    "black>=26.3.0",
+    "ruff>=0.15.5",
+]
