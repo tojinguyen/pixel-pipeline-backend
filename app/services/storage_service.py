@@ -1,16 +1,25 @@
+import asyncio
+
 from botocore.exceptions import NoCredentialsError
 
 from app.core.config import get_settings
 from app.core.exceptions import StorageError
-from app.infrastructure.storage.s3_client import get_s3_client
 
 
-def upload_file(file_bytes: bytes, filename: str, content_type: str = "image/png") -> str:
+async def upload_file_async(
+    file_bytes: bytes,
+    filename: str,
+    content_type: str,
+    client,
+) -> str:
+    """
+    Offload the boto3 S3 upload (blocking I/O) to a thread pool to avoid
+    blocking FastAPI's async event loop.
+    """
     settings = get_settings()
-    client = get_s3_client()
-
     try:
-        client.put_object(
+        await asyncio.to_thread(
+            client.put_object,
             Bucket=settings.s3_bucket_name,
             Key=filename,
             Body=file_bytes,
