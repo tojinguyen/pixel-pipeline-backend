@@ -1,5 +1,7 @@
-from fastapi import Request
+from fastapi import HTTPException, Request
 from botocore.client import BaseClient
+
+from app.infrastructure.imaging.rembg_client import init_rembg_session
 
 
 def get_s3_client(request: Request) -> BaseClient:
@@ -8,5 +10,22 @@ def get_s3_client(request: Request) -> BaseClient:
 
 
 def get_rembg_session(request: Request):
-    """Retrieve the rembg session stored in app.state during lifespan startup."""
-    return request.app.state.rembg_session
+    """Lazily initialize rembg session on first use.
+
+    This keeps API docs and non-rembg endpoints available even when the optional
+    onnxruntime backend is not installed yet.
+    """
+    session = request.app.state.rembg_session
+    if session is not None:
+        return session
+
+    try:
+        session = init_rembg_session("u2net")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Background removal model unavailable. Install rembg backend (e.g. onnxruntime).",
+        ) from exc
+
+    request.app.state.rembg_session = session
+    return session
