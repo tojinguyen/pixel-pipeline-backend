@@ -21,7 +21,7 @@ def get_rembg_session(request: Request):
 
     try:
         session = init_rembg_session("u2net")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         raise HTTPException(
             status_code=503,
             detail="Background removal model unavailable. Install rembg backend (e.g. onnxruntime).",
