@@ -40,6 +40,18 @@ def build_downscaled_filename(original_filename: str | None, target_width: int, 
     return f"{filename_base}_{target_width}x{target_height}.png"
 
 
+def normalize_scale_by(scale_by: ScaleByMode | str | None) -> str | None:
+    if scale_by is None:
+        return None
+
+    try:
+        return resolve_scale_axis(scale_by).value
+    except ValueError as exc:
+        raise ImageProcessingError(
+            "scale_by must be one of: width, height, horizontal, vertical, landscape, portrait"
+        ) from exc
+
+
 def _downscale_image(
     input_bytes: bytes,
     target_width: int,
