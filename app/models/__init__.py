@@ -1,3 +1,3 @@
-from app.models.image import DownscaledFile, NoBgFile, OriginalFile
+from app.models.image import CleanupFile, DownscaledFile, NoBgFile, OriginalFile, PixelizedFile
 
-__all__ = ["OriginalFile", "NoBgFile", "DownscaledFile"]
+__all__ = ["OriginalFile", "NoBgFile", "DownscaledFile", "PixelizedFile", "CleanupFile"]
