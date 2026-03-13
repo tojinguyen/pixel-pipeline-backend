@@ -55,3 +55,24 @@ class DownscaledFile(Base):
     target_height: Mapped[int] = mapped_column(Integer, nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PixelizedFile(Base):
+    __tablename__ = "pixelized_files"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source_file_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    s3_key: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    
+    # Pixelization specific metadata
+    mode: Mapped[str] = mapped_column(String(32), nullable=False)  # 'auto' or 'preset'
+    num_colors: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    palette_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
