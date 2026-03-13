@@ -70,9 +70,7 @@ class PixelizedFile(Base):
     content_type: Mapped[str] = mapped_column(String(255), nullable=False)
     
     # Pixelization specific metadata
-    mode: Mapped[str] = mapped_column(String(32), nullable=False)  # 'auto' or 'preset'
-    num_colors: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    palette_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    num_colors: Mapped[int] = mapped_column(Integer, nullable=False)
     
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

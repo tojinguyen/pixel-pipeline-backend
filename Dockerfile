@@ -15,11 +15,20 @@ RUN uv sync --no-dev
 # Copy source code
 COPY app/ app/
 COPY main.py .
+COPY alembic.ini .
+COPY backend_migrations/ backend_migrations/
+
+# Copy scripts
+COPY scripts/ scripts/
+RUN chmod +x scripts/*.sh
 
 # Add venv to PATH so uv-installed packages are available
 ENV PATH="/workspace/.venv/bin:$PATH"
 
 EXPOSE 8000
+
+# Entrypoint handles migrations, then executes CMD
+ENTRYPOINT ["./scripts/start.sh"]
 
 # Production command (overridden in docker-compose for dev hot-reload)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
