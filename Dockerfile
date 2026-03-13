@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir uv
 
 # Copy dependency manifests first (layer caching)
 COPY pyproject.toml .
+COPY uv.lock .
 
 # Install production dependencies
 RUN uv sync --no-dev

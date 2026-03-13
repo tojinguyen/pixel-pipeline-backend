@@ -12,6 +12,8 @@ class Settings:
     aws_region: str
     s3_bucket_name: str
     s3_endpoint_url: str
+    s3_public_endpoint_url: str
+    database_url: str
 
 
 @lru_cache(maxsize=1)
@@ -23,4 +25,12 @@ def get_settings() -> Settings:
         aws_region=os.getenv("AWS_REGION", "us-east-1"),
         s3_bucket_name=os.getenv("S3_BUCKET_NAME", "pixel-pipeline"),
         s3_endpoint_url=os.getenv("S3_ENDPOINT_URL", "http://localhost:9000"),
+        s3_public_endpoint_url=os.getenv(
+            "S3_PUBLIC_ENDPOINT_URL",
+            os.getenv("S3_ENDPOINT_URL", "http://localhost:9000"),
+        ),
+        database_url=os.getenv(
+            "DATABASE_URL",
+            "postgresql+asyncpg://postgres:postgres@localhost:5432/pixel_pipeline",
+        ),
     )

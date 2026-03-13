@@ -1,6 +1,10 @@
+from collections.abc import AsyncIterator
+
 from fastapi import HTTPException, Request
 from botocore.client import BaseClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.infrastructure.database.session import get_db_session
 from app.infrastructure.imaging.rembg_client import init_rembg_session
 
 
@@ -29,3 +33,8 @@ def get_rembg_session(request: Request):
 
     request.app.state.rembg_session = session
     return session
+
+
+async def get_db() -> AsyncIterator[AsyncSession]:
+    async for session in get_db_session():
+        yield session
