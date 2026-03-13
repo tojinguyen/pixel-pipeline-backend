@@ -30,5 +30,13 @@ class MultipleNoBgImageResponse(BaseModel):
     status: str = Field(default="stored")
 
 
+class SingleRemoveBgRequest(BaseModel):
+    original_file_id: UUID
+
+
+class MultipleRemoveBgRequest(BaseModel):
+    original_file_ids: list[UUID]
+
+
 class HealthResponse(BaseModel):
     status: str
