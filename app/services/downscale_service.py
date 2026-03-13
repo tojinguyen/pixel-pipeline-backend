@@ -5,9 +5,7 @@ from dataclasses import dataclass
 
 from PIL import Image
 
-from app.core.downscale import ScaleAxis, ScaleByMode, resolve_scale_axis
 from app.core.exceptions import ImageProcessingError
-
 
 @dataclass(frozen=True)
 class DownscaleResult:
@@ -15,23 +13,17 @@ class DownscaleResult:
     output_width: int
     output_height: int
 
-
 async def downscale_image_async(
     input_bytes: bytes,
     target_width: int,
     target_height: int,
-    keep_aspect_ratio: bool = False,
-    scale_by: ScaleByMode | str | None = None,
 ) -> DownscaleResult:
     return await asyncio.to_thread(
         _downscale_image,
         input_bytes,
         target_width,
         target_height,
-        keep_aspect_ratio,
-        scale_by,
     )
-
 
 def build_downscaled_filename(original_filename: str | None, target_width: int, target_height: int) -> str:
     filename_base = os.path.splitext(os.path.basename(original_filename or ""))[0]
@@ -39,72 +31,38 @@ def build_downscaled_filename(original_filename: str | None, target_width: int, 
         filename_base = "image"
     return f"{filename_base}_{target_width}x{target_height}.png"
 
-
-def normalize_scale_by(scale_by: ScaleByMode | str | None) -> str | None:
-    if scale_by is None:
-        return None
-
-    try:
-        return resolve_scale_axis(scale_by).value
-    except ValueError as exc:
-        raise ImageProcessingError(
-            "scale_by must be one of: width, height, horizontal, vertical, landscape, portrait"
-        ) from exc
-
-
 def _downscale_image(
     input_bytes: bytes,
     target_width: int,
     target_height: int,
-    keep_aspect_ratio: bool,
-    scale_by: ScaleByMode | str | None,
 ) -> DownscaleResult:
     try:
         with Image.open(io.BytesIO(input_bytes)) as source_image:
             source_rgba = source_image.convert("RGBA")
-            output_width, output_height = _resolve_target_size(
-                original_width=source_rgba.width,
-                original_height=source_rgba.height,
-                target_width=target_width,
-                target_height=target_height,
-                keep_aspect_ratio=keep_aspect_ratio,
-                scale_by=scale_by,
-            )
-            resized_image = source_rgba.resize(
-                (output_width, output_height),
-                resample=Image.Resampling.NEAREST,
-            )
+            
+            orig_width, orig_height = source_rgba.size
+            
+            scale_factor = min(target_width / orig_width, target_height / orig_height)
+            
+            new_width = max(1, int(orig_width * scale_factor))
+            new_height = max(1, int(orig_height * scale_factor))
+            
+            resized_image = source_rgba.resize((new_width, new_height), Image.Resampling.NEAREST)
+            
+            centered_image = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 0))
+            
+            left = (target_width - new_width) // 2
+            top = (target_height - new_height) // 2
+            
+            centered_image.paste(resized_image, (left, top))
 
         output_buffer = io.BytesIO()
-        resized_image.save(output_buffer, format="PNG")
+        centered_image.save(output_buffer, format="PNG")
         return DownscaleResult(
             image_bytes=output_buffer.getvalue(),
-            output_width=output_width,
-            output_height=output_height,
+            output_width=target_width,
+            output_height=target_height,
         )
-    except ValueError as exc:
-        raise ImageProcessingError(
-            "scale_by must be one of: width, height, horizontal, vertical, landscape, portrait"
-        ) from exc
     except Exception as exc:
-        raise ImageProcessingError("Image downscale failed") from exc
+        raise ImageProcessingError("Image downscaling failed") from exc
 
-
-def _resolve_target_size(
-    original_width: int,
-    original_height: int,
-    target_width: int,
-    target_height: int,
-    keep_aspect_ratio: bool,
-    scale_by: ScaleByMode | str | None,
-) -> tuple[int, int]:
-    if not keep_aspect_ratio:
-        return target_width, target_height
-
-    scale_axis = resolve_scale_axis(scale_by)
-    if scale_axis == ScaleAxis.WIDTH:
-        scaled_height = max(1, round(original_height * (target_width / original_width)))
-        return target_width, scaled_height
-
-    scaled_width = max(1, round(original_width * (target_height / original_height)))
-    return scaled_width, target_height
