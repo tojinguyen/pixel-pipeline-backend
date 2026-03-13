@@ -16,7 +16,11 @@ from app.schemas.downscale import (
     DownscaledFileResponse,
     MultipleDownscaledFileResponse,
 )
-from app.services.downscale_service import build_downscaled_filename, downscale_image_async
+from app.services.downscale_service import (
+    build_downscaled_filename,
+    downscale_image_async,
+    normalize_scale_by,
+)
 from app.services.image_service import build_storage_key
 from app.services.storage_service import download_file_async, get_file_url, upload_file_async
 
@@ -24,13 +28,19 @@ from app.services.storage_service import download_file_async, get_file_url, uplo
 router = APIRouter(prefix="/downscale")
 
 
-def _safe_filename(filename: str | None, fallback: str = "image.png") -> str:
-    return filename or fallback
-
-
 def _validate_image_content_type(content_type: str | None) -> None:
     if not content_type or not content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
+
+
+def _resolve_scale_by_option(keep_aspect_ratio: bool, scale_by: str | None) -> str | None:
+    if not keep_aspect_ratio:
+        return None
+
+    try:
+        return normalize_scale_by(scale_by)
+    except ImageProcessingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/image")
@@ -38,20 +48,34 @@ async def downscale_single_image(
     file: UploadFile = File(...),
     target_width: int = Form(..., gt=0, le=4096),
     target_height: int = Form(..., gt=0, le=4096),
+    keep_aspect_ratio: bool = Form(default=False),
+    scale_by: str | None = Form(default=None),
 ) -> StreamingResponse:
     _validate_image_content_type(file.content_type)
     input_bytes = await file.read()
     if not input_bytes:
         raise HTTPException(status_code=400, detail="Empty file provided")
 
-    try:
-        output_bytes = await downscale_image_async(input_bytes, target_width, target_height)
-    except ImageProcessingError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    normalized_scale_by = _resolve_scale_by_option(keep_aspect_ratio, scale_by)
 
-    output_filename = build_downscaled_filename(file.filename, target_width, target_height)
+    try:
+        downscale_result = await downscale_image_async(
+            input_bytes,
+            target_width,
+            target_height,
+            keep_aspect_ratio,
+            normalized_scale_by,
+        )
+    except ImageProcessingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    output_filename = build_downscaled_filename(
+        file.filename,
+        downscale_result.output_width,
+        downscale_result.output_height,
+    )
     return StreamingResponse(
-        io.BytesIO(output_bytes),
+        io.BytesIO(downscale_result.image_bytes),
         media_type="image/png",
         headers={"Content-Disposition": f'inline; filename="{output_filename}"'},
     )
@@ -62,8 +86,11 @@ async def downscale_multiple_images(
     files: list[UploadFile] = File(...),
     target_width: int = Form(..., gt=0, le=4096),
     target_height: int = Form(..., gt=0, le=4096),
+    keep_aspect_ratio: bool = Form(default=False),
+    scale_by: str | None = Form(default=None),
 ) -> StreamingResponse:
     zip_buffer = io.BytesIO()
+    normalized_scale_by = _resolve_scale_by_option(keep_aspect_ratio, scale_by)
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for file in files:
@@ -73,9 +100,19 @@ async def downscale_multiple_images(
                 continue
 
             try:
-                output_bytes = await downscale_image_async(input_bytes, target_width, target_height)
-                output_filename = build_downscaled_filename(file.filename, target_width, target_height)
-                zip_file.writestr(output_filename, output_bytes)
+                downscale_result = await downscale_image_async(
+                    input_bytes,
+                    target_width,
+                    target_height,
+                    keep_aspect_ratio,
+                    normalized_scale_by,
+                )
+                output_filename = build_downscaled_filename(
+                    file.filename,
+                    downscale_result.output_width,
+                    downscale_result.output_height,
+                )
+                zip_file.writestr(output_filename, downscale_result.image_bytes)
             except ImageProcessingError:
                 continue
 
@@ -97,24 +134,31 @@ async def downscale_by_id(
     if source_record is None:
         raise HTTPException(status_code=404, detail="Source file not found")
 
+    normalized_scale_by = _resolve_scale_by_option(payload.keep_aspect_ratio, payload.scale_by)
+
     try:
         source_bytes = await download_file_async(source_record.s3_key, s3_client)
-        output_bytes = await downscale_image_async(
+        downscale_result = await downscale_image_async(
             source_bytes,
             payload.target_width,
             payload.target_height,
+            payload.keep_aspect_ratio,
+            normalized_scale_by,
         )
         return await _store_downscaled_file(
             db=db,
             s3_client=s3_client,
             source_record=source_record,
             source_type=source_type,
-            output_bytes=output_bytes,
-            target_width=payload.target_width,
-            target_height=payload.target_height,
+            output_bytes=downscale_result.image_bytes,
+            target_width=downscale_result.output_width,
+            target_height=downscale_result.output_height,
+            keep_aspect_ratio=payload.keep_aspect_ratio,
+            scale_by=normalized_scale_by,
         )
     except (StorageError, ImageProcessingError) as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        status_code = 400 if isinstance(exc, ImageProcessingError) else 500
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
 @router.post("/by-ids", response_model=MultipleDownscaledFileResponse)
@@ -125,6 +169,7 @@ async def downscale_by_ids(
 ) -> MultipleDownscaledFileResponse:
     stored_files: list[DownscaledFileResponse] = []
     failed_files: list[str] = []
+    normalized_scale_by = _resolve_scale_by_option(payload.keep_aspect_ratio, payload.scale_by)
 
     for file_id in payload.file_ids:
         source_record, source_type = await _resolve_source_record(db, file_id)
@@ -134,19 +179,23 @@ async def downscale_by_ids(
 
         try:
             source_bytes = await download_file_async(source_record.s3_key, s3_client)
-            output_bytes = await downscale_image_async(
+            downscale_result = await downscale_image_async(
                 source_bytes,
                 payload.target_width,
                 payload.target_height,
+                payload.keep_aspect_ratio,
+                normalized_scale_by,
             )
             response = await _store_downscaled_file(
                 db=db,
                 s3_client=s3_client,
                 source_record=source_record,
                 source_type=source_type,
-                output_bytes=output_bytes,
-                target_width=payload.target_width,
-                target_height=payload.target_height,
+                output_bytes=downscale_result.image_bytes,
+                target_width=downscale_result.output_width,
+                target_height=downscale_result.output_height,
+                keep_aspect_ratio=payload.keep_aspect_ratio,
+                scale_by=normalized_scale_by,
             )
             stored_files.append(response)
         except (StorageError, ImageProcessingError):
@@ -184,6 +233,8 @@ async def _store_downscaled_file(
     output_bytes: bytes,
     target_width: int,
     target_height: int,
+    keep_aspect_ratio: bool,
+    scale_by: str | None,
 ) -> DownscaledFileResponse:
     output_filename = build_downscaled_filename(source_record.filename, target_width, target_height)
     object_key = build_storage_key(output_filename, "processed/downscaled")
@@ -212,5 +263,7 @@ async def _store_downscaled_file(
         source_type=record.source_type,
         target_width=record.target_width,
         target_height=record.target_height,
+        keep_aspect_ratio=keep_aspect_ratio,
+        scale_by=scale_by,
         status="stored",
     )
