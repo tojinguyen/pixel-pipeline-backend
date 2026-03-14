@@ -24,7 +24,7 @@ def get_rembg_session(request: Request):
         return session
 
     try:
-        session = init_rembg_session("u2net")
+        session = init_rembg_session("birefnet-general")
     except (Exception, SystemExit) as exc:
         raise HTTPException(
             status_code=503,
