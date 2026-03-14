@@ -38,6 +38,21 @@ shell:
 clean:
 	docker compose down --remove-orphans
 
+# ── Database ──────────────────────────────────────────────────────────────────
+
+.PHONY: migrate upgrade
+
+migrate:
+	@if [ -z "$(m)" ]; then \
+		echo "Error: Need to provide a migration message."; \
+		echo "Usage: make migrate m=\"Migration description\""; \
+		exit 1; \
+	fi
+	./scripts/migrate.sh "$(m)"
+
+upgrade:
+	./scripts/upgrade.sh
+
 # Remove containers, volumes (wipes MinIO data), and built images
 fclean:
 	docker compose down --volumes --rmi local --remove-orphans
