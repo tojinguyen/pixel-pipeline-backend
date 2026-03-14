@@ -21,14 +21,14 @@ class MultipleCleanupFileResponse(BaseModel):
     status: str = Field(default="stored")
 
 
-class CleanupByIdRequest(BaseModel):
+class CleanupRequest(BaseModel):
     file_id: UUID = Field(..., description="Pixelized file id")
     kernel_size: int = Field(default=2, ge=1, le=15, description="Morphology kernel size")
     alpha_threshold: int = Field(default=128, ge=0, le=255, description="Mask threshold from alpha channel")
     iterations: int = Field(default=1, ge=1, le=10, description="Number of morphology iterations")
 
 
-class CleanupByIdsRequest(BaseModel):
+class CleanupBatchRequest(BaseModel):
     file_ids: list[UUID] = Field(..., min_length=1, description="Pixelized file ids")
     kernel_size: int = Field(default=2, ge=1, le=15, description="Morphology kernel size")
     alpha_threshold: int = Field(default=128, ge=0, le=255, description="Mask threshold from alpha channel")

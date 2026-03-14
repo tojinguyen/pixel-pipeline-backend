@@ -9,8 +9,8 @@ from app.core.cleanup import CleanupError
 from app.core.exceptions import StorageError
 from app.models.image import CleanupFile, PixelizedFile
 from app.schemas.cleanup import (
-    CleanupByIdRequest,
-    CleanupByIdsRequest,
+    CleanupRequest,
+    CleanupBatchRequest,
     CleanupFileResponse,
     MultipleCleanupFileResponse,
 )
@@ -22,9 +22,9 @@ from app.services.storage_service import download_file_async, get_file_url, uplo
 router = APIRouter(prefix="/cleanup")
 
 
-@router.post("/by-id", response_model=CleanupFileResponse)
-async def cleanup_by_id(
-    payload: CleanupByIdRequest,
+@router.post("/", response_model=CleanupFileResponse)
+async def cleanup_image(
+    payload: CleanupRequest,
     db: AsyncSession = Depends(get_db),
     s3_client=Depends(get_s3_client),
 ) -> CleanupFileResponse:
@@ -55,9 +55,9 @@ async def cleanup_by_id(
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
-@router.post("/by-ids", response_model=MultipleCleanupFileResponse)
-async def cleanup_by_ids(
-    payload: CleanupByIdsRequest,
+@router.post("/batch", response_model=MultipleCleanupFileResponse)
+async def cleanup_images_batch(
+    payload: CleanupBatchRequest,
     db: AsyncSession = Depends(get_db),
     s3_client=Depends(get_s3_client),
 ) -> MultipleCleanupFileResponse:
