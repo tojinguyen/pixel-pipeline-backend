@@ -55,7 +55,7 @@ async def cleanup_image(
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
-@router.post("/batch", response_model=MultipleCleanupFileResponse)
+@router.post("/images", response_model=MultipleCleanupFileResponse)
 async def cleanup_images_batch(
     payload: CleanupBatchRequest,
     db: AsyncSession = Depends(get_db),
