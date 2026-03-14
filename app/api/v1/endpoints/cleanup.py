@@ -22,7 +22,7 @@ from app.services.storage_service import download_file_async, get_file_url, uplo
 router = APIRouter(prefix="/cleanup")
 
 
-@router.post("/", response_model=CleanupFileResponse)
+@router.post("/image", response_model=CleanupFileResponse)
 async def cleanup_image(
     payload: CleanupRequest,
     db: AsyncSession = Depends(get_db),
