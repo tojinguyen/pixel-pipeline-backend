@@ -70,6 +70,14 @@ def _process_cleanup(
         mask_closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=iterations)
         mask_cleaned = cv2.morphologyEx(mask_closed, cv2.MORPH_OPEN, kernel, iterations=iterations)
 
+        newly_opaque = cv2.bitwise_and(mask_cleaned, cv2.bitwise_not(mask))
+        
+        r, g, b = image_array[:, :, 0], image_array[:, :, 1], image_array[:, :, 2]
+        is_black_rgb = (r == 0) & (g == 0) & (b == 0)
+        
+        force_transparent = newly_opaque.astype(bool) & is_black_rgb
+        mask_cleaned[force_transparent] = 0
+
         image_array[:, :, 3] = mask_cleaned
 
         output_buffer = io.BytesIO()
