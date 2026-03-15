@@ -9,9 +9,9 @@ class CleanupFileResponse(BaseModel):
     url: str = Field(..., description="File access path (S3 URL)")
     source_file_id: UUID = Field(..., description="Source pixelized file id")
     source_type: str = Field(..., description="Resolved source table: pixelized")
-    kernel_size: int = Field(..., description="Morphology kernel size")
+    min_component_size: int = Field(..., description="Minimum component size to keep")
     alpha_threshold: int = Field(..., description="Alpha threshold used to generate binary mask")
-    iterations: int = Field(..., description="Morphology iterations for close/open")
+    add_outline: bool = Field(..., description="Whether to add a 1-pixel outline")
     status: str = Field(default="stored")
 
 
@@ -23,9 +23,9 @@ class MultipleCleanupFileResponse(BaseModel):
 
 class CleanupRequest(BaseModel):
     file_id: UUID = Field(..., description="Pixelized file id")
-    kernel_size: int = Field(default=2, ge=1, le=15, description="Morphology kernel size")
+    min_component_size: int = Field(default=2, ge=1, le=20, description="Minimum component size to keep")
     alpha_threshold: int = Field(default=128, ge=0, le=255, description="Mask threshold from alpha channel")
-    iterations: int = Field(default=1, ge=1, le=10, description="Number of morphology iterations")
+    add_outline: bool = Field(default=True, description="Whether to add a 1-pixel outline")
 
 
 class CleanupBatchRequest(BaseModel):

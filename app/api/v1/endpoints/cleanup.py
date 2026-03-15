@@ -36,9 +36,9 @@ async def cleanup_image(
         source_bytes = await download_file_async(source_record.s3_key, s3_client)
         cleanup_result = await cleanup_image_async(
             input_bytes=source_bytes,
-            kernel_size=payload.kernel_size,
             alpha_threshold=payload.alpha_threshold,
-            iterations=payload.iterations,
+            min_component_size=payload.min_component_size,
+            add_outline=payload.add_outline,
         )
         return await _store_cleanup_file(
             db=db,
@@ -46,9 +46,9 @@ async def cleanup_image(
             source_record=source_record,
             source_type=source_type,
             output_bytes=cleanup_result.image_bytes,
-            kernel_size=cleanup_result.kernel_size,
+            add_outline=cleanup_result.add_outline,
             alpha_threshold=cleanup_result.alpha_threshold,
-            iterations=cleanup_result.iterations,
+            min_component_size=cleanup_result.min_component_size,
         )
     except (StorageError, CleanupError) as exc:
         status_code = 400 if isinstance(exc, CleanupError) else 500
@@ -74,9 +74,9 @@ async def cleanup_images_batch(
             source_bytes = await download_file_async(source_record.s3_key, s3_client)
             cleanup_result = await cleanup_image_async(
                 input_bytes=source_bytes,
-                kernel_size=payload.kernel_size,
                 alpha_threshold=payload.alpha_threshold,
-                iterations=payload.iterations,
+                min_component_size=payload.min_component_size,
+                add_outline=payload.add_outline,
             )
             response = await _store_cleanup_file(
                 db=db,
@@ -84,9 +84,9 @@ async def cleanup_images_batch(
                 source_record=source_record,
                 source_type=source_type,
                 output_bytes=cleanup_result.image_bytes,
-                kernel_size=cleanup_result.kernel_size,
                 alpha_threshold=cleanup_result.alpha_threshold,
-                iterations=cleanup_result.iterations,
+                min_component_size=cleanup_result.min_component_size,
+                add_outline=cleanup_result.add_outline,
             )
             stored_files.append(response)
         except (StorageError, CleanupError):
@@ -117,15 +117,15 @@ async def _store_cleanup_file(
     source_record: PixelizedFile,
     source_type: str,
     output_bytes: bytes,
-    kernel_size: int,
+    add_outline: bool,
     alpha_threshold: int,
-    iterations: int,
+    min_component_size: int,
 ) -> CleanupFileResponse:
     output_filename = build_cleanup_filename(
         source_record.filename,
-        kernel_size,
         alpha_threshold,
-        iterations,
+        min_component_size,
+        add_outline,
     )
     object_key = build_storage_key(output_filename, "processed/cleanup")
 
@@ -138,9 +138,9 @@ async def _store_cleanup_file(
         s3_key=object_key,
         url=get_file_url(object_key),
         content_type="image/png",
-        kernel_size=kernel_size,
+        min_component_size=min_component_size,
         alpha_threshold=alpha_threshold,
-        iterations=iterations,
+        add_outline=add_outline,
         file_size=len(output_bytes),
     )
     db.add(record)
@@ -153,8 +153,8 @@ async def _store_cleanup_file(
         url=record.url,
         source_file_id=record.source_file_id,
         source_type=record.source_type,
-        kernel_size=record.kernel_size,
+        min_component_size=record.min_component_size,
         alpha_threshold=record.alpha_threshold,
-        iterations=record.iterations,
+        add_outline=record.add_outline,
         status="stored",
     )

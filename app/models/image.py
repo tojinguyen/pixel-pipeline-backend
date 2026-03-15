@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -88,9 +88,9 @@ class CleanupFile(Base):
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_type: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    kernel_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    min_component_size: Mapped[int] = mapped_column(Integer, nullable=False)
     alpha_threshold: Mapped[int] = mapped_column(Integer, nullable=False)
-    iterations: Mapped[int] = mapped_column(Integer, nullable=False)
+    add_outline: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
