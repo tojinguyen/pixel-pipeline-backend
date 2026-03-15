@@ -28,3 +28,6 @@ dev = [
     "black>=26.3.0",
     "ruff>=0.15.5",
 ]
+
+[tool.uv.sources]
+pixeloe = { git = "https://github.com/KohakuBlueleaf/PixelOE.git" }

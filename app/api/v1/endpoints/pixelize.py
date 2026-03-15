@@ -71,6 +71,9 @@ async def pixelize_image(
         pixelize_result = await pixelize_image_async(
             input_bytes=source_bytes,
             num_colors=payload.num_colors,
+            target_size=payload.target_size,
+            dither_method=payload.dither_method,
+            dither_strength=payload.dither_strength,
         )
         return await _store_pixelized_file(
             db=db,
@@ -105,6 +108,9 @@ async def pixelize_images(
             pixelize_result = await pixelize_image_async(
                 input_bytes=source_bytes,
                 num_colors=payload.num_colors,
+                target_size=payload.target_size,
+                dither_method=payload.dither_method,
+                dither_strength=payload.dither_strength,
             )
             response = await _store_pixelized_file(
                 db=db,
