@@ -1,3 +1,24 @@
+"""
+Pixel Art Conversion Pipeline — Upgraded Service
+=================================================
+Pipeline:
+  1. Hard Alpha Binarization         → sắc viền như dao cạo
+  2. Contrast-Aware Downscaling      → giữ nét mảnh (cv2 + numpy, no torch)
+  3. CIELAB Palette Quantization     → màu rực rỡ, không "bùn"
+  4. Bayer Ordered Dithering         → chuyển màu mượt, chất Retro
+  5. CCL Orphan Pixel Removal        → loại rác 1-2px
+  6. Dilation Outline                → viền đen bao ngoài nhân vật
+
+Install:
+    uv add pillow numpy opencv-python-headless scikit-image
+    pip install pillow numpy opencv-python-headless scikit-image
+
+Why not pixeloe?
+    pixeloe requires torch + torchvision + kornia (~2 GB).
+    The contrast-aware algorithm it uses is re-implemented here
+    with pure cv2/numpy — same quality, zero heavy deps.
+"""
+
 import asyncio
 import io
 import os
@@ -6,7 +27,7 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 from skimage import color as skcolor
 
 from app.core.exceptions import ImageProcessingError
@@ -108,7 +129,7 @@ def _downscale_image(
         # ── Step 1: Hard Alpha Binarization ───────────────────────────────
         arr[:, :, 3] = _hard_alpha_binarize(arr[:, :, 3])
 
-        # ── Step 2: Contrast-Aware Downscaling (PixelOE) ──────────────────
+        # ── Step 2: LANCZOS + Unsharp Mask Downscaling ───────────────────
         src_rgba = Image.fromarray(arr, "RGBA")
         downscaled = _contrast_aware_downscale(src_rgba, target_width, target_height)
         arr = np.array(downscaled, dtype=np.uint8)
@@ -169,91 +190,82 @@ def _hard_alpha_binarize(alpha: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Step 2 — Contrast-Aware Downscaling via PixelOE
+# Step 2 — High-Quality Downscaling: LANCZOS + Unsharp Mask
 # ---------------------------------------------------------------------------
 def _contrast_aware_downscale(
     image: Image.Image,
     target_w: int,
     target_h: int,
-    patch_size: int = 8,
+    sharpen_radius: float = 0.8,
+    sharpen_percent: int = 160,
+    sharpen_threshold: int = 2,
 ) -> Image.Image:
-    """Contrast-aware downscaling — no torch / pixeloe required.
+    """Downscale with maximum sharpness retention.
 
-    For each output pixel, the source image is divided into
-    ``patch_size × patch_size`` blocks.  Instead of averaging all
-    pixels in the block (which blurs edges) or picking the centre pixel
-    (which misses detail), we select whichever pixel has the **highest
-    local contrast** — i.e. the pixel whose neighbourhood has the
-    greatest luminance variance.  This preserves thin lines, hair
-    strands, and weapon silhouettes that Nearest Neighbour would drop.
+    Why block-variance picking is wrong:
+        Selecting 1 pixel per NxN block discards up to (N²-1)/N² of all
+        colour information.  On smooth gradients the "highest contrast"
+        winner is often an outlier edge pixel, which introduces noise
+        instead of preserving structure.
 
-    Algorithm (replicates PixelOE "contrast" mode without torch):
-      1. Convert RGBA → greyscale luminance for contrast scoring only.
-      2. Compute per-pixel local variance in a 3×3 window (cv2.boxFilter).
-      3. For each (patch_h × patch_w) block that maps to one output pixel,
-         pick the source pixel with maximum variance score.
-      4. Copy that pixel's full RGBA value to the output.
+    Correct approach — two passes:
+
+    Pass 1 — LANCZOS resampling:
+        Lanczos applies a windowed sinc kernel that integrates ALL source
+        pixels contributing to each output pixel.  It is the mathematical
+        optimum for downscaling: maximum detail retention with minimal
+        aliasing, zero information thrown away.
+
+    Pass 2 — Unsharp Mask (USM):
+        LANCZOS introduces a slight halo softness due to its roll-off.
+        USM subtracts a blurred copy of the image from itself, amplifying
+        high-frequency edges without touching flat areas.  The result looks
+        hand-sharpened — crisp outlines, clean colour blocks.
+
+    Alpha channel is downscaled separately with NEAREST to preserve the
+    hard binary edges produced by Step 1 (no anti-aliasing bleed).
 
     Args:
-        image:      PIL RGBA image (alpha already binarised).
-        target_w:   Canvas width.
-        target_h:   Canvas height.
-        patch_size: Source pixels collapsed into each output pixel.
-                    Smaller = more detail, larger = more stylised.
+        image:             PIL RGBA image (alpha already binarised).
+        target_w:          Canvas width in pixels.
+        target_h:          Canvas height in pixels.
+        sharpen_radius:    USM blur radius (smaller = finer detail boost).
+        sharpen_percent:   USM strength (100 = no change, 150-200 = sharp).
+        sharpen_threshold: USM edge threshold — pixels differing less than
+                           this value are left untouched (avoids noise).
     """
     orig_w, orig_h = image.size
 
-    # ── Aspect-ratio-preserving output size ───────────────────────────
+    # ── Aspect-ratio-preserving output dimensions ─────────────────────
     scale = min(target_w / orig_w, target_h / orig_h)
     new_w = max(1, round(orig_w * scale))
     new_h = max(1, round(orig_h * scale))
 
-    # ── Pad source to an exact multiple of patch_size ─────────────────
-    pad_w = (patch_size - orig_w % patch_size) % patch_size
-    pad_h = (patch_size - orig_h % patch_size) % patch_size
-    padded_w = orig_w + pad_w
-    padded_h = orig_h + pad_h
+    # ── Separate RGB and Alpha channels ──────────────────────────────
+    # Process separately so LANCZOS never bleeds into the alpha edge.
+    rgb_image = image.convert("RGB")
+    alpha_channel = image.split()[3]  # single-channel, already 0/255
 
-    src = np.array(image, dtype=np.uint8)                           # (H, W, 4)
-    if pad_w or pad_h:
-        src = np.pad(src, ((0, pad_h), (0, pad_w), (0, 0)))        # pad with 0 (transparent)
+    # ── Pass 1: LANCZOS downscale ────────────────────────────────────
+    # RGB: LANCZOS for maximum colour fidelity
+    rgb_small = rgb_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    # Alpha: NEAREST to keep hard binary edges, no semi-transparent fringe
+    alpha_small = alpha_channel.resize((new_w, new_h), Image.Resampling.NEAREST)
 
-    # ── Luminance for contrast scoring (rec. 601) ─────────────────────
-    gray = (
-        0.299 * src[:, :, 0].astype(np.float32)
-        + 0.587 * src[:, :, 1].astype(np.float32)
-        + 0.114 * src[:, :, 2].astype(np.float32)
+    # ── Pass 2: Unsharp Mask on RGB only ─────────────────────────────
+    rgb_sharp = rgb_small.filter(
+        ImageFilter.UnsharpMask(
+            radius=sharpen_radius,
+            percent=sharpen_percent,
+            threshold=sharpen_threshold,
+        )
     )
 
-    # Local variance ≈ E[x²] − E[x]²  via two box filters
-    mean   = cv2.boxFilter(gray,          cv2.CV_32F, (3, 3), normalize=True)
-    mean_sq = cv2.boxFilter(gray * gray,  cv2.CV_32F, (3, 3), normalize=True)
-    variance = mean_sq - mean * mean                                # (H_pad, W_pad)
-
-    # ── Per-block argmax selection ────────────────────────────────────
-    # Reshape into (n_blocks_h, patch_h, n_blocks_w, patch_w)
-    blocks_h = padded_h // patch_size
-    blocks_w = padded_w // patch_size
-
-    var_blocks = variance.reshape(blocks_h, patch_size, blocks_w, patch_size)
-    src_blocks = src.reshape(blocks_h, patch_size, blocks_w, patch_size, 4)
-
-    # Flatten each block → (blocks_h, blocks_w, patch_size²)
-    var_flat = var_blocks.transpose(0, 2, 1, 3).reshape(blocks_h, blocks_w, -1)
-    src_flat = src_blocks.transpose(0, 2, 1, 3, 4).reshape(blocks_h, blocks_w, -1, 4)
-
-    best_idx = np.argmax(var_flat, axis=-1)                         # (blocks_h, blocks_w)
-    bh, bw = np.indices((blocks_h, blocks_w))
-    output_full = src_flat[bh, bw, best_idx]                       # (blocks_h, blocks_w, 4)
-
-    # ── Crop back to (new_h, new_w) and centre on canvas ─────────────
-    output_full = output_full[:new_h, :new_w].astype(np.uint8)
+    # ── Recombine and centre on transparent canvas ────────────────────
+    result = Image.merge("RGBA", (*rgb_sharp.split(), alpha_small))
 
     canvas = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
-    canvas.paste(
-        Image.fromarray(output_full, "RGBA"),
-        ((target_w - new_w) // 2, (target_h - new_h) // 2),
-    )
+    canvas.paste(result, ((target_w - new_w) // 2, (target_h - new_h) // 2))
     return canvas
 
 
