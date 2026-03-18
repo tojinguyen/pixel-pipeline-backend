@@ -10,6 +10,8 @@ from app.infrastructure.storage.s3_client import init_s3_client
 from app.models import image as image_models  # noqa: F401
 
 
+from fastapi.middleware.cors import CORSMiddleware
+
 configure_logging()
 logger = get_logger(__name__)
 
@@ -32,6 +34,14 @@ app = FastAPI(
     title="Pixel Forge API",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(api_router)

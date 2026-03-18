@@ -64,7 +64,7 @@ async def process_single_pipeline(
     orig_record = OriginalFile(
         filename=orig_filename,
         s3_key=orig_key,
-        url=get_file_url(orig_key, s3_client),
+        url=get_file_url(orig_key),
         content_type=file.content_type,
         file_size=len(file_bytes)
     )
@@ -84,7 +84,7 @@ async def process_single_pipeline(
         original_file_id=orig_record.id,
         filename=nobg_filename,
         s3_key=nobg_key,
-        url=get_file_url(nobg_key, s3_client),
+        url=get_file_url(nobg_key),
         content_type="image/png",
         file_size=len(nobg_bytes)
     )
@@ -109,11 +109,11 @@ async def process_single_pipeline(
         source_type="nobg",
         filename=down_filename,
         s3_key=down_key,
-        url=get_file_url(down_key, s3_client),
+        url=get_file_url(down_key),
         content_type="image/png",
-        file_size=down_result.file_size,
-        target_width=down_result.width,
-        target_height=down_result.height
+        file_size=len(down_result.image_bytes),
+        target_width=down_result.output_width,
+        target_height=down_result.output_height
     )
     db.add(down_record)
     await db.commit()
@@ -138,15 +138,10 @@ async def process_single_pipeline(
         source_type="downscaled",
         filename=pix_filename,
         s3_key=pix_key,
-        url=get_file_url(pix_key, s3_client),
+        url=get_file_url(pix_key),
         content_type="image/png",
-        file_size=pix_result.file_size,
-        width=pix_result.width,
-        height=pix_result.height,
-        num_colors=pix_result.num_colors,
-        dither_method=pix_result.dither_method,
-        dither_strength=pix_result.dither_strength,
-        palette=pix_result.palette
+        file_size=len(pix_result.image_bytes),
+        num_colors=pix_result.num_colors
     )
     db.add(pix_record)
     await db.commit()
@@ -170,11 +165,9 @@ async def process_single_pipeline(
         source_type="pixelized",
         filename=clean_filename,
         s3_key=clean_key,
-        url=get_file_url(clean_key, s3_client),
+        url=get_file_url(clean_key),
         content_type="image/png",
-        file_size=clean_result.file_size,
-        width=clean_result.width,
-        height=clean_result.height,
+        file_size=len(clean_result.image_bytes),
         alpha_threshold=clean_result.alpha_threshold,
         min_component_size=clean_result.min_component_size,
         add_outline=clean_result.add_outline
