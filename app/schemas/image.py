@@ -21,6 +21,8 @@ class NoBgImageResponse(BaseModel):
     filename: str = Field(..., description="Saved file name")
     url: str = Field(..., description="File access path (S3 URL)")
     original_file_id: UUID | None = Field(default=None, description="Original file id if linked")
+    target_width: int = Field(..., description="Downscaled target width")
+    target_height: int = Field(..., description="Downscaled target height")
     status: str = Field(default="stored")
 
 
@@ -32,10 +34,14 @@ class MultipleNoBgImageResponse(BaseModel):
 
 class SingleRemoveBgRequest(BaseModel):
     original_file_id: UUID
+    target_width: int = Field(..., gt=0, description="Target width for downscaling")
+    target_height: int = Field(..., gt=0, description="Target height for downscaling")
 
 
 class MultipleRemoveBgRequest(BaseModel):
     original_file_ids: list[UUID]
+    target_width: int = Field(..., gt=0, description="Target width for downscaling")
+    target_height: int = Field(..., gt=0, description="Target height for downscaling")
 
 
 class HealthResponse(BaseModel):

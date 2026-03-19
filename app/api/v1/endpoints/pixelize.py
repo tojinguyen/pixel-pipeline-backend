@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db, get_s3_client
 from app.core.exceptions import ImageProcessingError, StorageError
-from app.models.image import DownscaledFile, PixelizedFile
+from app.models.image import NoBgFile, PixelizedFile
 from app.schemas.pixelize import (
     SinglePixelizeRequest,
     MultiplePixelizeRequest,
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/pixelize")
 async def _store_pixelized_file(
     db: AsyncSession,
     s3_client,
-    source_record: DownscaledFile,
+    source_record: NoBgFile,
     output_bytes: bytes,
     num_colors: int,
 ) -> PixelizedFileResponse:
@@ -60,7 +60,7 @@ async def pixelize_image(
     db: AsyncSession = Depends(get_db),
     s3_client=Depends(get_s3_client),
 ) -> PixelizedFileResponse:
-    result = await db.execute(select(DownscaledFile).where(DownscaledFile.id == payload.file_id))
+    result = await db.execute(select(NoBgFile).where(NoBgFile.id == payload.file_id))
     source_record = result.scalar_one_or_none()
     
     if source_record is None:
@@ -96,7 +96,7 @@ async def pixelize_images(
     failed_files: list[str] = []
 
     for file_id in payload.file_ids:
-        result = await db.execute(select(DownscaledFile).where(DownscaledFile.id == file_id))
+        result = await db.execute(select(NoBgFile).where(NoBgFile.id == file_id))
         source_record = result.scalar_one_or_none()
         
         if source_record is None:

@@ -11,9 +11,20 @@ async def remove_background_async(input_bytes: bytes, session) -> bytes:
     def _remove_and_clean(data: bytes, sess) -> bytes:
         from rembg import remove
 
-        removed_bytes = remove(data, session=sess)
-        img = Image.open(io.BytesIO(removed_bytes)).convert("RGBA")
-        arr = np.array(img, dtype=np.uint8)
+        img = Image.open(io.BytesIO(data)).convert("RGBA")
+        
+        # Limit max size to 512px
+        max_size = 512 
+        if max(img.width, img.height) > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+        
+        resized_bytes_io = io.BytesIO()
+        img.save(resized_bytes_io, format="PNG")
+        resized_data = resized_bytes_io.getvalue()
+
+        removed_bytes = remove(resized_data, session=sess)
+        img_nobg = Image.open(io.BytesIO(removed_bytes)).convert("RGBA")
+        arr = np.array(img_nobg, dtype=np.uint8)
 
         alpha = arr[:, :, 3]
         alpha[alpha < 128] = 0

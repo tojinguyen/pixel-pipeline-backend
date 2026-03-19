@@ -8,6 +8,7 @@ from app.api.dependencies import get_db, get_rembg_session, get_s3_client
 from app.core.exceptions import ImageProcessingError, StorageError
 from app.models.image import NoBgFile, OriginalFile
 from app.schemas.image import MultipleNoBgImageResponse, MultipleRemoveBgRequest, NoBgImageResponse, SingleRemoveBgRequest
+from app.services.downscale_service import downscale_image_async
 from app.services.image_service import build_nobg_filename, build_storage_key, remove_background_async
 from app.services.storage_service import download_file_async, get_file_url, upload_file_async
 
@@ -30,7 +31,8 @@ async def remove_bg_single_image(
 
     try:
         input_bytes = await download_file_async(original_file.s3_key, s3_client)
-        output_bytes = await remove_background_async(input_bytes, rembg_session)
+        downscale_result = await downscale_image_async(input_bytes, request.target_width, request.target_height)
+        output_bytes = await remove_background_async(downscale_result.image_bytes, rembg_session)
         output_filename = build_nobg_filename(original_file.filename)
         object_key = build_storage_key(output_filename, "processed/nobg")
         await upload_file_async(output_bytes, object_key, "image/png", s3_client)
@@ -41,6 +43,8 @@ async def remove_bg_single_image(
             s3_key=object_key,
             url=get_file_url(object_key),
             content_type="image/png",
+            target_width=downscale_result.output_width,
+            target_height=downscale_result.output_height,
             file_size=len(output_bytes),
         )
         db.add(record)
@@ -51,12 +55,18 @@ async def remove_bg_single_image(
             filename=record.filename,
             url=record.url,
             original_file_id=record.original_file_id,
+            target_width=record.target_width,
+            target_height=record.target_height,
             status="stored",
         )
     except (ImageProcessingError, StorageError) as exc:
+        import traceback
+        traceback.print_exc()
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception as exc:
+        import traceback
+        traceback.print_exc()
         await db.rollback()
         raise HTTPException(status_code=500, detail="Image processing failed") from exc
 
@@ -81,7 +91,8 @@ async def remove_bg_multiple_images(
 
         try:
             input_bytes = await download_file_async(original_file.s3_key, s3_client)
-            output_bytes = await remove_background_async(input_bytes, rembg_session)
+            downscale_result = await downscale_image_async(input_bytes, request.target_width, request.target_height)
+            output_bytes = await remove_background_async(downscale_result.image_bytes, rembg_session)
             output_filename = build_nobg_filename(original_file.filename)
             object_key = build_storage_key(output_filename, "processed/nobg")
             await upload_file_async(output_bytes, object_key, "image/png", s3_client)
@@ -92,6 +103,8 @@ async def remove_bg_multiple_images(
                 s3_key=object_key,
                 url=get_file_url(object_key),
                 content_type="image/png",
+                target_width=downscale_result.output_width,
+                target_height=downscale_result.output_height,
                 file_size=len(output_bytes),
             )
             db.add(record)
@@ -103,6 +116,8 @@ async def remove_bg_multiple_images(
                     filename=record.filename,
                     url=record.url,
                     original_file_id=record.original_file_id,
+                    target_width=record.target_width,
+                    target_height=record.target_height,
                     status="stored",
                 )
             )
