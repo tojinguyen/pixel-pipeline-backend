@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 
 # Tải sẵn model RemBG (Tuyệt đối không tải lúc runtime)
 RUN mkdir -p /root/.u2net && \
-    curl -L https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-epoch_244.onnx -o /root/.u2net/birefnet-general.onnx
+    curl -L https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx -o /root/.u2net/u2netp.onnx
 
 # Copy file config để cài package
 COPY pyproject.toml uv.lock ./

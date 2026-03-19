@@ -14,6 +14,7 @@ class Settings:
     s3_endpoint_url: str
     s3_public_endpoint_url: str
     database_url: str
+    rembg_model_name: str
 
 
 @lru_cache(maxsize=1)
@@ -33,4 +34,5 @@ def get_settings() -> Settings:
             "DATABASE_URL",
             "postgresql+asyncpg://postgres:postgres@localhost:5432/pixel_pipeline",
         ),
+        rembg_model_name=os.getenv("REMBG_MODEL_NAME", "u2netp"),
     )

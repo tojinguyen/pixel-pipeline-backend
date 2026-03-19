@@ -24,8 +24,10 @@ def upgrade() -> None:
     op.drop_index(op.f('ix_downscaled_files_source_file_id'), table_name='downscaled_files')
     op.drop_index(op.f('ix_downscaled_files_source_type'), table_name='downscaled_files')
     op.drop_table('downscaled_files')
-    op.add_column('nobg_files', sa.Column('target_width', sa.Integer(), nullable=False))
-    op.add_column('nobg_files', sa.Column('target_height', sa.Integer(), nullable=False))
+    op.add_column('nobg_files', sa.Column('target_width', sa.Integer(), server_default='0', nullable=False))
+    op.add_column('nobg_files', sa.Column('target_height', sa.Integer(), server_default='0', nullable=False))
+    op.alter_column('nobg_files', 'target_width', server_default=None)
+    op.alter_column('nobg_files', 'target_height', server_default=None)
     # ### end Alembic commands ###
 
 

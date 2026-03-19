@@ -43,7 +43,7 @@ async def pixelize_image_async(
     """Convert an image to pixel-art quality through a 4-step AI pipeline.
 
     Steps:
-        1. Background removal via birefnet-general + Hard Alpha Binarization
+        1. Background removal via configured rembg model + Hard Alpha Binarization
         2. Contrast-Aware Downscaling
         3. CIELAB Color Quantization + Dithering
         4. CCL Orphan Removal + Dilation Outline
@@ -85,7 +85,7 @@ def build_pixelized_filename(original_filename: str | None, num_colors: int) -> 
 # ---------------------------------------------------------------------------
 
 def _remove_background(image: Image.Image, session) -> Image.Image:
-    """Remove background with birefnet-general, then binarise the alpha channel.
+    """Remove background with the configured rembg model, then binarise alpha.
 
     Pixel-art does not tolerate semi-transparent edge pixels (anti-aliasing).
     Every alpha value is snapped to either 0 (transparent) or 255 (opaque).

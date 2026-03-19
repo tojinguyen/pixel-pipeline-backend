@@ -4,6 +4,7 @@ from fastapi import HTTPException, Request
 from botocore.client import BaseClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.infrastructure.database.session import get_db_session
 from app.infrastructure.imaging.rembg_client import init_rembg_session
 
@@ -23,8 +24,10 @@ def get_rembg_session(request: Request):
     if session is not None:
         return session
 
+    settings = get_settings()
+
     try:
-        session = init_rembg_session("birefnet-general")
+        session = init_rembg_session(settings.rembg_model_name)
     except (Exception, SystemExit) as exc:
         raise HTTPException(
             status_code=503,

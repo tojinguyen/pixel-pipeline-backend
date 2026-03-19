@@ -5,27 +5,31 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.core.config import get_settings
 from app.core.handlers import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.infrastructure.database.engine import close_engine
 from app.infrastructure.storage.s3_client import init_s3_client
-from app.infrastructure.imaging.rembg_client import init_rembg_session  # <--- THÊM IMPORT NÀY
+from app.infrastructure.imaging.rembg_client import init_rembg_session
 from app.models import image as image_models  # noqa: F401
 
 configure_logging()
 logger = get_logger(__name__)
+settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize heavy dependencies on startup and store them in app.state."""
+    """Initialize dependencies on startup and store them in app.state."""
     logger.info("Initializing application dependencies...")
     
     # 1. Khởi tạo S3 Client
     app.state.s3_client = init_s3_client()
     
-    # 2. Pre-load Model AI ngay lúc start app thay vì đợi API call
-    logger.info("Loading AI model (BiRefNet) into memory. This may take a few seconds...")
-    app.state.rembg_session = init_rembg_session("birefnet-general")
+    logger.info(
+        "Loading background removal model '%s' into memory. This may take a few seconds...",
+        settings.rembg_model_name,
+    )
+    app.state.rembg_session = init_rembg_session(settings.rembg_model_name)
     
     logger.info("Dependencies initialized successfully. Server is ready!")
 

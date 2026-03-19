@@ -1,4 +1,4 @@
-def init_rembg_session(model_name: str = "u2net"):
+def init_rembg_session(model_name: str = "u2netp"):
     """
     Initialize and return a rembg session.
     The caller is responsible for storing the returned session (e.g., in app.state).
