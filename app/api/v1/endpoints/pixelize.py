@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db, get_s3_client
+from app.api.dependencies import get_db, get_s3_client, get_rembg_session
 from app.core.exceptions import ImageProcessingError, StorageError
 from app.models.image import NoBgFile, PixelizedFile
 from app.schemas.pixelize import (
@@ -59,6 +59,7 @@ async def pixelize_image(
     payload: SinglePixelizeRequest,
     db: AsyncSession = Depends(get_db),
     s3_client=Depends(get_s3_client),
+    rembg_session=Depends(get_rembg_session),
 ) -> PixelizedFileResponse:
     result = await db.execute(select(NoBgFile).where(NoBgFile.id == payload.file_id))
     source_record = result.scalar_one_or_none()
@@ -74,6 +75,7 @@ async def pixelize_image(
             target_size=payload.target_size,
             dither_method=payload.dither_method,
             dither_strength=payload.dither_strength,
+            rembg_session=rembg_session,
         )
         return await _store_pixelized_file(
             db=db,

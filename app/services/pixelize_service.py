@@ -39,6 +39,7 @@ async def pixelize_image_async(
     target_size: int = 64,
     dither_method: DitherMethod = DitherMethod.ORDERED,
     dither_strength: float = 0.5,
+    rembg_session=None,
 ) -> PixelizeResult:
     """Convert an image to pixel-art quality through a 4-step AI pipeline.
 
@@ -54,6 +55,7 @@ async def pixelize_image_async(
         target_size:     Pixel-art grid size (8–512). Default 64.
         dither_method:   "ordered" | "floyd-steinberg" | "atkinson" | "none". Default "ordered".
         dither_strength: Dithering intensity 0.0–1.0. Default 0.5.
+        rembg_session:   The rembg session to use for background removal.
     """
     if not (1 <= num_colors <= 256):
         raise ImageProcessingError("num_colors must be between 1 and 256")
@@ -69,6 +71,7 @@ async def pixelize_image_async(
         target_size,
         dither_method,
         dither_strength,
+        rembg_session,
     )
 
 
@@ -78,22 +81,11 @@ def build_pixelized_filename(original_filename: str | None, num_colors: int) -> 
         filename_base = "image"
     return f"{filename_base}_{num_colors}colors.png"
 
-
-# ---------------------------------------------------------------------------
-# Session caching  (rembg model is expensive to initialise)
-# ---------------------------------------------------------------------------
-
-@lru_cache(maxsize=1)
-def _get_rembg_session():
-    """Load birefnet-general once and reuse across all requests."""
-    return new_session("birefnet-general")
-
-
 # ---------------------------------------------------------------------------
 # Step 1 – Background Removal + Hard Alpha Binarization
 # ---------------------------------------------------------------------------
 
-def _remove_background(image: Image.Image) -> Image.Image:
+def _remove_background(image: Image.Image, session) -> Image.Image:
     """Remove background with birefnet-general, then binarise the alpha channel.
 
     Pixel-art does not tolerate semi-transparent edge pixels (anti-aliasing).
@@ -102,7 +94,7 @@ def _remove_background(image: Image.Image) -> Image.Image:
     buf = io.BytesIO()
     image.save(buf, format="PNG")
 
-    result_bytes = remove(buf.getvalue(), session=_get_rembg_session())
+    result_bytes = remove(buf.getvalue(), session=session)
     result = Image.open(io.BytesIO(result_bytes)).convert("RGBA")
 
     # Hard Alpha Binarization – razor-sharp silhouette, no fringing
@@ -444,6 +436,7 @@ def _process_pixelize(
     target_size: int,
     dither_method: DitherMethod,
     dither_strength: float,
+    rembg_session,
 ) -> PixelizeResult:
     try:
         with Image.open(io.BytesIO(input_bytes)) as src:
@@ -452,7 +445,7 @@ def _process_pixelize(
         original_size = image.size  # (W, H) — restored at the end
 
         # 1. Background removal + hard alpha binarisation
-        image = _remove_background(image)
+        image = _remove_background(image, rembg_session)
 
         # 2. Contrast-aware structural downscaling
         image = _downscale_contrast_aware(image, target_size)
