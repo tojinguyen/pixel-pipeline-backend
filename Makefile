@@ -43,15 +43,11 @@ clean:
 .PHONY: migrate upgrade
 
 migrate:
-	@if [ -z "$(m)" ]; then \
-		echo "Error: Need to provide a migration message."; \
-		echo "Usage: make migrate m=\"Migration description\""; \
-		exit 1; \
-	fi
-	./scripts/migrate.sh "$(m)"
+	$(if $(strip $(m)),,$(error Need to provide a migration message. Usage: make migrate m="Migration description"))
+	uv run alembic revision --autogenerate -m "$(m)"
 
 upgrade:
-	./scripts/upgrade.sh
+	uv run alembic upgrade head
 
 # Remove containers, volumes (wipes MinIO data), and built images
 fclean:

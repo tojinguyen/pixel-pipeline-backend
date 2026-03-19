@@ -3,12 +3,11 @@ import io
 import os
 from dataclasses import dataclass
 from enum import Enum
-from functools import lru_cache
 
 import cv2
 import numpy as np
 from PIL import Image
-from rembg import new_session, remove
+from rembg import remove
 
 from app.core.exceptions import ImageProcessingError
 
