@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Float, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -79,4 +79,30 @@ class CleanupFile(Base):
     add_outline: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PipelineFile(Base):
+    """Final output of the full remove_bg → pixelize → cleanup pipeline."""
+
+    __tablename__ = "pipeline_files"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    s3_key: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(64), nullable=False, default="image/png")
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Pipeline configuration snapshot
+    target_pixel_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    num_colors: Mapped[int] = mapped_column(Integer, nullable=False)
+    dither_method: Mapped[str] = mapped_column(String(32), nullable=False)
+    dither_strength: Mapped[float] = mapped_column(Float, nullable=False)
+    alpha_threshold: Mapped[int] = mapped_column(Integer, nullable=False)
+    min_component_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    add_outline: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
