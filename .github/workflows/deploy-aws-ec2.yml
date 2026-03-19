@@ -1,0 +1,71 @@
+name: Deploy to AWS EC2
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy manually
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.AWS_EC2_SSH_PRIVATE_KEY }}
+
+      - name: Add EC2 host key
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT="${{ secrets.AWS_EC2_PORT }}"
+          if [ -z "$PORT" ]; then PORT=22; fi
+
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$PORT" -H "${{ secrets.AWS_EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy latest main to EC2
+        shell: bash
+        env:
+          APP_DIR: ${{ secrets.EC2_APP_DIR }}
+        run: |
+          set -euo pipefail
+
+          PORT="${{ secrets.AWS_EC2_PORT }}"
+          if [ -z "$PORT" ]; then PORT=22; fi
+
+          if [ -z "$APP_DIR" ]; then
+            APP_DIR="/opt/pixel-pipeline-backend"
+          fi
+
+          ssh -p "$PORT" "${{ secrets.AWS_EC2_USER }}@${{ secrets.AWS_EC2_HOST }}" "APP_DIR='$APP_DIR' bash -s" <<'EOF'
+          set -euo pipefail
+
+          if [ ! -d "$APP_DIR/.git" ]; then
+            echo "Repository not found in APP_DIR=$APP_DIR"
+            exit 1
+          fi
+
+          cd "$APP_DIR"
+
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+          if docker compose version >/dev/null 2>&1; then
+            COMPOSE_CMD="docker compose"
+          elif command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE_CMD="docker-compose"
+          else
+            echo "Docker Compose is not installed on the server"
+            exit 1
+          fi
+
+          $COMPOSE_CMD up -d --build --remove-orphans
+          docker image prune -f
+          EOF
